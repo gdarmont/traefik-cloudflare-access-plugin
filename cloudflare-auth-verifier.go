@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/gdarmont/go-oidc/v3/oidc"
+	"github.com/coreos/go-oidc/v3/oidc"
 )
 
 // Config the plugin configuration.
