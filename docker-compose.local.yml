@@ -1,0 +1,32 @@
+version: "3.8"
+
+services:
+  traefik:
+    image: traefik
+    ports:
+      - "8000:80"
+      - "8080:8080"
+    command:
+      - --api.dashboard=true
+      - --api.insecure=true
+      - --experimental.localPlugins.cloudflareaccess.moduleName=github.com/gdarmont/cloudflareaccess
+      - --providers.docker=true
+      - --entrypoints.http.address=:80
+    volumes:
+      - '/var/run/docker.sock:/var/run/docker.sock'
+      - '.:/plugins-local/src/github.com/gdarmont/cloudflareaccess'
+    labels:
+      - traefik.enable=true
+      - traefik.http.services.traefik.loadbalancer.server.port=8080
+      - traefik.http.middlewares.cloudflareaccess-test.plugin.cloudflareaccess.teamName=test
+      - traefik.http.middlewares.cloudflareaccess-test.plugin.cloudflareaccess.clientID=4714c1358e65fe4b408ad6d432a5f878f08194bdb4752441fd56faefa9b2b6f2
+
+  dummy:
+    image: containous/whoami
+
+  website:
+    image: containous/whoami
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.website.rule=PathPrefix(`/website`)
+      - traefik.http.routers.website.middlewares=waf@docker

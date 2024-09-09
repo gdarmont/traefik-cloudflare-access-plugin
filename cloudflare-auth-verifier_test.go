@@ -17,16 +17,15 @@ import (
 func TestCloudflareAccessMissingHeader(t *testing.T) {
 	// Given
 	cfg := cloudflareaccess.CreateConfig()
-	ctx := context.Background()
-	next := http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {})
 
-	handler, err := cloudflareaccess.New(ctx, next, cfg, "cloudflare-plugin")
+	handler, err := cloudflareaccess.New(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
-	recorder := httptest.NewRecorder()
 
 	// When
+	handler.HandleRequest()
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost", nil)
 	if err != nil {
 		t.Fatal(err)
@@ -55,12 +54,9 @@ func TestCloudflareAccessValidCookieToken(t *testing.T) {
 	token := test.signKey.sign(t, []byte(test.idToken))
 
 	ctx := context.Background()
-	next := http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {})
 
 	// Creating the plugin
 	handler := cloudflareaccess.CloudflareAccess{
-		Next: next,
-		Name: "cloudflare-plugin",
 		Verifier: oidc.NewVerifier(
 			test.issuer,
 			&oidc.StaticKeySet{PublicKeys: []crypto.PublicKey{test.signKey.pub}},

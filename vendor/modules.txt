@@ -9,6 +9,14 @@ github.com/go-jose/go-jose/v3/json
 # github.com/golang/protobuf v1.5.3
 ## explicit; go 1.9
 github.com/golang/protobuf/proto
+# github.com/http-wasm/http-wasm-guest-tinygo v0.4.0
+## explicit; go 1.20
+github.com/http-wasm/http-wasm-guest-tinygo/handler
+github.com/http-wasm/http-wasm-guest-tinygo/handler/api
+github.com/http-wasm/http-wasm-guest-tinygo/handler/internal/imports
+github.com/http-wasm/http-wasm-guest-tinygo/handler/internal/mem
+# github.com/tetratelabs/wazero v1.5.0
+## explicit; go 1.19
 # golang.org/x/crypto v0.14.0
 ## explicit; go 1.17
 golang.org/x/crypto/pbkdf2

@@ -3,10 +3,14 @@ package cloudflareaccess
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 
 	"github.com/coreos/go-oidc/v3/oidc"
+	"github.com/http-wasm/http-wasm-guest-tinygo/handler"
+	"github.com/http-wasm/http-wasm-guest-tinygo/handler/api"
 )
 
 // Config the plugin configuration.
@@ -17,8 +21,8 @@ type Config struct {
 }
 
 // CreateConfig creates the default plugin configuration.
-func CreateConfig() *Config {
-	return &Config{
+func CreateConfig() Config {
+	return Config{
 		teamName:          "test",
 		clientID:          "",
 		skipClientIDCheck: false,
@@ -27,13 +31,28 @@ func CreateConfig() *Config {
 
 // CloudflareAccess plugin.
 type CloudflareAccess struct {
-	Next     http.Handler
 	Name     string
 	Verifier *oidc.IDTokenVerifier
 }
 
+func main() {
+	var config Config
+	err := json.Unmarshal(handler.Host.GetConfig(), &config)
+	if err != nil {
+		handler.Host.Log(api.LogLevelError, fmt.Sprintf("Could not load config %v", err))
+		os.Exit(1)
+	}
+
+	cloudflareAccess, err := New(config)
+	if err != nil {
+		handler.Host.Log(api.LogLevelError, fmt.Sprintf("Could not load config %v", err))
+		os.Exit(1)
+	}
+	handler.HandleRequestFn = cloudflareAccess.HandleRequest
+}
+
 // New created a new plugin.
-func New(ctx context.Context, next http.Handler, config *Config, name string) (http.Handler, error) {
+func New(config Config) (*CloudflareAccess, error) {
 	// Add config checks
 	teamDomain := fmt.Sprintf("https://%s.cloudflareaccess.com", config.teamName)
 	certsURL := fmt.Sprintf("%s/cdn-cgi/access/certs", teamDomain)
@@ -42,47 +61,36 @@ func New(ctx context.Context, next http.Handler, config *Config, name string) (h
 		ClientID:          config.clientID,
 		SkipClientIDCheck: config.skipClientIDCheck,
 	}
-	keySet := oidc.NewRemoteKeySet(ctx, certsURL)
+	keySet := oidc.NewRemoteKeySet(context.TODO(), certsURL)
 	verifier := oidc.NewVerifier(teamDomain, keySet, oidcConfig)
 
 	return &CloudflareAccess{
-		Next:     next,
-		Name:     name,
 		Verifier: verifier,
 	}, nil
 }
 
-func (e *CloudflareAccess) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
-	headers := req.Header
+// Implementation using "github.com/http-wasm/http-wasm-guest-tinygo" of ABI https://http-wasm.io/http-handler-abi/
+func (e *CloudflareAccess) HandleRequest(req api.Request, resp api.Response) (next bool, reqCtx uint32) {
+	headers := req.Headers()
 
 	// Read from Header or Cookie
-	accessJWT := headers.Get("Cf-Access-Jwt-Assertion")
-	if accessJWT == "" {
-		cookie, err := req.Cookie("CF_AUTHORIZATION")
-		if err == nil {
-			accessJWT = cookie.Value
-		}
-	}
+	accessJWT, found := headers.Get("Cf-Access-Jwt-Assertion")
+	//if !found {
+	// Handle token retrieval from Cookie
+	//}
 
-	if accessJWT == "" {
-		rw.WriteHeader(http.StatusUnauthorized)
-		_, err := rw.Write([]byte("No token on the request"))
-		if err != nil {
-			return
-		}
+	if !found {
+		resp.SetStatusCode(http.StatusUnauthorized)
+		resp.Body().WriteString("No token on the request")
 		return
 	}
 
 	// Verify the access token
-	ctx := req.Context()
-	_, err := e.Verifier.Verify(ctx, accessJWT)
+	_, err := e.Verifier.Verify(context.TODO(), accessJWT)
 	if err != nil {
-		rw.WriteHeader(http.StatusUnauthorized)
-		_, e := rw.Write([]byte(fmt.Sprintf("Invalid token: %s", err.Error())))
-		if e != nil {
-			return
-		}
+		resp.SetStatusCode(http.StatusUnauthorized)
+		resp.Body().WriteString(fmt.Sprintf("Invalid token: %s", err.Error()))
 		return
 	}
-	e.Next.ServeHTTP(rw, req)
+	return true, 0
 }

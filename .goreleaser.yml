@@ -1,0 +1,33 @@
+project_name: traefik-cloudflare-access-plugin
+version: 2
+
+builds:
+  - binary: plugin.wasm
+    gobinary: go
+    no_unique_dist_dir: true
+    main: .
+    ldflags:
+      - ''
+    goos:
+      - wasip1
+    goarch:
+      - wasm
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^doc:'
+      - '^chore:'
+      - '^chore(deps):'
+      - '^test:'
+      - '^tests:'
+
+archives:
+  - id: traefik-cloudflare-access-plugin
+    name_template: '{{ .ProjectName }}_v{{ .Version }}'
+    format: zip
+    files:
+      - LICENSE
+      - .traefik.yml
