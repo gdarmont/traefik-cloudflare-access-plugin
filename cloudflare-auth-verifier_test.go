@@ -6,12 +6,11 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"github.com/coreos/go-oidc/v3/oidc"
-	"github.com/go-jose/go-jose/v3"
+	cloudflareaccess "github.com/gdarmont/traefik-cloudflare-access-plugin"
+	"github.com/go-jose/go-jose/v4"
 	"net/http"
 	"net/http/httptest"
 	"testing"
-
-	"github.com/gdarmont/traefik-cloudflare-access-plugin"
 )
 
 func TestCloudflareAccessMissingHeader(t *testing.T) {
