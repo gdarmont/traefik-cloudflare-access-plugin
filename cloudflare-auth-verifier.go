@@ -82,7 +82,7 @@ func (e *CloudflareAccess) HandleRequest(req api.Request, resp api.Response) (ne
 	if !found {
 		resp.SetStatusCode(http.StatusUnauthorized)
 		resp.Body().WriteString("No token on the request")
-		return
+		return false, 0
 	}
 
 	// Verify the access token
@@ -90,7 +90,9 @@ func (e *CloudflareAccess) HandleRequest(req api.Request, resp api.Response) (ne
 	if err != nil {
 		resp.SetStatusCode(http.StatusUnauthorized)
 		resp.Body().WriteString(fmt.Sprintf("Invalid token: %s", err.Error()))
-		return
+		return false, 0
 	}
-	return true, 0
+
+	// Proceed with the next handler
+	return true, 1
 }
