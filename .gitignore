@@ -1,2 +1,5 @@
 .idea/
 .DS_Store
+
+# Go vendored dependencies (legacy implementation under _old/)
+_old/vendor/
