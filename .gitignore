@@ -1,5 +1,8 @@
 .idea/
 .DS_Store
 
+# Rust build artifacts
+/target
+
 # Go vendored dependencies (legacy implementation under _old/)
 _old/vendor/
