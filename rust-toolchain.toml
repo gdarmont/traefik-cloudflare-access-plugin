@@ -1,0 +1,5 @@
+[toolchain]
+# http-wasm-guest is edition 2024, which requires rustc >= 1.85.1.
+channel = "stable"
+targets = ["wasm32-wasip1"]
+components = ["clippy", "rustfmt"]

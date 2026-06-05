@@ -1,11 +1,23 @@
 displayName: CloudflareAccess Plugin
 type: middleware
+runtime: wasm
 
 import: github.com/gdarmont/traefik-cloudflare-access-plugin
 
-summary: 'Cloudflare Access Zero Trust JWT validation'
+summary: 'Cloudflare Access (Zero Trust) JWT validation, compiled to WASM'
 
 testData:
   teamName: "test"
-  clientID: "4714c1358e65fe4b408ad6d432a5f878f08194bdb4752441fd56faefa9b2b6f2"
-  skipClientIDCheck: false
+  clientId: "4714c1358e65fe4b408ad6d432a5f878f08194bdb4752441fd56faefa9b2b6f2"
+  skipClientIdCheck: false
+  skipExpiryCheck: false
+  # Public signing keys from https://<teamName>.cloudflareaccess.com/cdn-cgi/access/certs.
+  # The example key below is a throwaway generated for this test fixture; replace it
+  # with your team's real keys (see README.md).
+  jwks:
+    keys:
+      - kid: "example-key-id"
+        kty: "RSA"
+        alg: "RS256"
+        n: "uty2a12mcK9xLkrvdj2nbgGpnV4qkektpVCG3O7CM0IcoumjK6uVyR_hMsY3ZXbu4ciatwNIHVpA5AI-j0oAfJw3QaVCM13uo6KT4Y95pL3BgXfOv673trsK58DShTUBIydbQWhUr-F0NjQxzssvkerqufuCrR_YcJb7y4dwTDhvDLTDAEvO9CFfseMnDtn035BKNW8n69lT8d2fsYr1bycAWdTvwlUeskS3Ert-jfW-tbOuWWEN88zUURF0ReZUJnIZxKgz-avqhh6OBtP4JmeTRmc1AiQv-YfHBu0SV8yD72_DdDumTwLOMukq-Hr073PkXDNCNisvCU1MMYDGxQ"
+        e: "AQAB"

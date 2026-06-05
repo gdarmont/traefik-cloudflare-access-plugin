@@ -1,0 +1,43 @@
+[package]
+name = "traefik-cloudflare-access-plugin"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85.1"
+license = "Apache-2.0"
+description = "Traefik WASM middleware that validates Cloudflare Access (Zero Trust) JWTs"
+repository = "https://github.com/gdarmont/traefik-cloudflare-access-plugin"
+
+# Pure, portable verification logic. Built for both the host (tests) and wasm.
+[lib]
+name = "cloudflare_access"
+path = "src/lib.rs"
+
+# The http-wasm guest entrypoint. Compiles to `plugin.wasm`.
+[[bin]]
+name = "plugin"
+path = "src/main.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+base64 = "0.22"
+rsa = "0.9"
+# `oid` provides `Sha256: AssociatedOid`, required for prefixed PKCS#1 v1.5
+# (RS256) signature verification.
+sha2 = { version = "0.10", features = ["oid"] }
+
+# Only the wasm guest needs the http-wasm host ABI. Keeping it target-specific
+# means native `cargo test` never tries to link the (host-provided) FFI symbols.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+http-wasm-guest = "0.11"
+
+[dev-dependencies]
+# RSA key generation + JWT signing used by the test suite (native only).
+rand = "0.8"
+
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true
+codegen-units = 1
+panic = "abort"
