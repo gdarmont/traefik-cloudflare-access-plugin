@@ -29,6 +29,7 @@ mod wasm {
 
     // http-wasm log levels: debug=-1, info=0, warn=1, error=2.
     const LOG_INFO: i32 = 0;
+    const LOG_WARN: i32 = 1;
     const LOG_ERROR: i32 = 2;
 
     const STATUS_UNAUTHORIZED: i32 = 401;
@@ -39,17 +40,29 @@ mod wasm {
         let config_bytes = admin::config();
         let plugin = match PluginConfig::from_json(&config_bytes) {
             Ok(config) => {
+                let verifier = Verifier::from_config(&config);
+                // Report the number of *usable* RS256 keys, which may be fewer
+                // than the configured count if some are non-RSA or malformed.
                 log::write(
                     LOG_INFO,
                     format!(
-                        "cloudflare-access: configured for issuer {} ({} key(s))",
+                        "cloudflare-access: configured for issuer {} ({} usable key(s) of {} configured)",
                         config.issuer(),
+                        verifier.key_count(),
                         config.jwks.keys.len()
                     )
                     .as_bytes(),
                 );
+                if verifier.key_count() == 0 {
+                    // Not fatal at load time, but every request will be denied
+                    // until usable keys are supplied.
+                    log::write(
+                        LOG_WARN,
+                        b"cloudflare-access: no usable RS256 keys; all requests will be denied",
+                    );
+                }
                 Plugin {
-                    verifier: Some(Verifier::from_config(&config)),
+                    verifier: Some(verifier),
                 }
             }
             Err(err) => {

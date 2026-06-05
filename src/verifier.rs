@@ -9,7 +9,7 @@ use rsa::signature::Verifier as _;
 use serde::Deserialize;
 use sha2::Sha256;
 
-use crate::config::{Jwk, PluginConfig};
+use crate::config::PluginConfig;
 
 /// Reasons a token may fail verification.
 #[derive(Debug, PartialEq, Eq)]
@@ -49,6 +49,14 @@ impl core::fmt::Display for VerifyError {
 
 impl std::error::Error for VerifyError {}
 
+/// A signing key ready for verification: its `kid` (empty when the JWK omits
+/// one) and the pre-built RS256 verifying key.
+#[derive(Debug, Clone)]
+struct SigningKey {
+    kid: String,
+    verifying_key: VerifyingKey<Sha256>,
+}
+
 /// Verifies Cloudflare Access JWTs against a fixed issuer, audience, and key set.
 #[derive(Debug, Clone)]
 pub struct Verifier {
@@ -56,19 +64,45 @@ pub struct Verifier {
     client_id: String,
     skip_client_id_check: bool,
     skip_expiry_check: bool,
-    keys: Vec<Jwk>,
+    keys: Vec<SigningKey>,
 }
 
 impl Verifier {
     /// Build a verifier from the plugin configuration.
+    ///
+    /// The RSA keys are parsed once here rather than on every request: each
+    /// usable RSA JWK is turned into a [`VerifyingKey`] up front. Non-RSA keys
+    /// and keys whose `n`/`e` material cannot be decoded are dropped (and thus
+    /// excluded from [`Self::key_count`]).
     pub fn from_config(config: &PluginConfig) -> Self {
+        let keys = config
+            .jwks
+            .keys
+            .iter()
+            .filter(|jwk| jwk.is_rsa())
+            .filter_map(|jwk| {
+                let public_key = jwk.to_public_key().ok()?;
+                Some(SigningKey {
+                    kid: jwk.kid.clone(),
+                    verifying_key: VerifyingKey::<Sha256>::new(public_key),
+                })
+            })
+            .collect();
         Self {
             issuer: config.issuer(),
             client_id: config.client_id.clone(),
             skip_client_id_check: config.skip_client_id_check,
             skip_expiry_check: config.skip_expiry_check,
-            keys: config.jwks.keys.clone(),
+            keys,
         }
+    }
+
+    /// The number of usable RS256 keys parsed from the configuration.
+    ///
+    /// A verifier with zero keys rejects every token, so this is worth logging
+    /// at startup as a misconfiguration signal.
+    pub fn key_count(&self) -> usize {
+        self.keys.len()
     }
 
     /// Verify a compact-serialized JWT.
@@ -109,32 +143,20 @@ impl Verifier {
 
         // When the header names a key id, only that key may sign the token.
         // Otherwise, accept any configured RSA key that verifies.
-        let candidates: Vec<&Jwk> = match kid {
-            Some(kid) if !kid.is_empty() => self
-                .keys
-                .iter()
-                .filter(|k| k.is_rsa() && k.kid == kid)
-                .collect(),
-            _ => self.keys.iter().filter(|k| k.is_rsa()).collect(),
-        };
+        let candidates = self.keys.iter().filter(|k| match kid {
+            Some(kid) if !kid.is_empty() => k.kid == kid,
+            _ => true,
+        });
 
-        if candidates.is_empty() {
-            return Err(VerifyError::UnknownKey);
-        }
-
-        let mut had_usable_key = false;
-        for jwk in candidates {
-            let Ok(public_key) = jwk.to_public_key() else {
-                continue;
-            };
-            had_usable_key = true;
-            let verifying_key = VerifyingKey::<Sha256>::new(public_key);
-            if verifying_key.verify(signing_input, &sig).is_ok() {
+        let mut had_candidate = false;
+        for key in candidates {
+            had_candidate = true;
+            if key.verifying_key.verify(signing_input, &sig).is_ok() {
                 return Ok(());
             }
         }
 
-        if had_usable_key {
+        if had_candidate {
             Err(VerifyError::BadSignature)
         } else {
             Err(VerifyError::UnknownKey)

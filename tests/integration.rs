@@ -233,3 +233,16 @@ fn no_keys_configured_is_rejected() {
 
     assert_eq!(verifier.verify(&token, NOW), Err(VerifyError::UnknownKey));
 }
+
+#[test]
+fn key_count_reports_only_usable_rsa_keys() {
+    // Two valid RSA keys plus a non-RSA key that must be ignored.
+    let k1 = Signer256::new("key-1");
+    let k2 = Signer256::new("key-2");
+    let ec = json!({ "kid": "ec", "kty": "EC", "alg": "ES256", "n": "", "e": "" });
+
+    let verifier = make_verifier(false, false, vec![k1.jwk(), k2.jwk(), ec]);
+    assert_eq!(verifier.key_count(), 2);
+
+    assert_eq!(make_verifier(false, false, vec![]).key_count(), 0);
+}
