@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    name: fmt / clippy / test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # `rustup show` installs the toolchain, target, and components pinned in
+      # rust-toolchain.toml.
+      - name: Install pinned toolchain
+        run: rustup show
+
+      - name: Cache cargo registry and target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
+
+      - name: Format
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Test
+        run: cargo test
+
+  wasm:
+    name: build wasm / verify committed artifact
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pinned toolchain
+        run: rustup show
+
+      - name: Cache cargo registry and target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-wasm-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
+
+      - name: Build plugin.wasm
+        run: cargo build --bin plugin --release --target wasm32-wasip1
+
+      - name: Copy artifact to repo root
+        run: cp target/wasm32-wasip1/release/plugin.wasm ./plugin.wasm
+
+      # The committed plugin.wasm is what Traefik loads from the tagged source.
+      # Fail if it does not match a fresh build of the current sources.
+      - name: Verify committed plugin.wasm is up to date
+        run: |
+          if ! git diff --exit-code -- plugin.wasm; then
+            echo "::error::plugin.wasm is out of date. Run 'make wasm' and commit the result."
+            exit 1
+          fi

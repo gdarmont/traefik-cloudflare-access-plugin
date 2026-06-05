@@ -1,5 +1,10 @@
 [toolchain]
-# http-wasm-guest is edition 2024, which requires rustc >= 1.85.1.
-channel = "stable"
+# Pinned to an exact version (not a floating "stable") so the committed
+# `plugin.wasm` is reproducible: CI rebuilds it with this same compiler and
+# checks the result byte-for-byte against the committed artifact. Bump this and
+# rebuild/commit `plugin.wasm` in the same change.
+#
+# Requires rustc >= 1.85.1 regardless, because http-wasm-guest uses edition 2024.
+channel = "1.94.1"
 targets = ["wasm32-wasip1"]
 components = ["clippy", "rustfmt"]

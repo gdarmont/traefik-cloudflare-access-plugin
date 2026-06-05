@@ -120,8 +120,10 @@ request is rejected with `401`.
 
 Requirements:
 
-- **Rust ≥ 1.85.1** (the `http-wasm-guest` crate uses edition 2024).
-- The WASI target: `rustup target add wasm32-wasip1`.
+- **Rust**, managed by `rustup`. The exact toolchain version and the
+  `wasm32-wasip1` target are pinned in [`rust-toolchain.toml`](rust-toolchain.toml)
+  and installed automatically on first `cargo` invocation. The pin keeps the
+  committed `plugin.wasm` reproducible; bump it and rebuild in the same change.
 
 Build the WASM artifact:
 
@@ -134,7 +136,8 @@ cp target/wasm32-wasip1/release/plugin.wasm ./plugin.wasm
 
 `plugin.wasm` is committed to the repository because Traefik downloads the
 prebuilt artifact from the tagged source — it does **not** compile Rust itself.
-Rebuild and commit `plugin.wasm` whenever the source changes.
+Rebuild and commit `plugin.wasm` whenever the source changes; CI rebuilds it with
+the pinned toolchain and fails if the committed artifact is stale.
 
 ### Make targets
 
