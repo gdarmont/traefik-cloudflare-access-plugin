@@ -33,11 +33,15 @@ pub fn extract_token(jwt_header: Option<&[u8]>, cookie_header: Option<&[u8]>) ->
 /// Find the value of a single cookie within a raw `Cookie` header.
 ///
 /// The header is a list of `name=value` pairs separated by `;`. Surrounding
-/// whitespace is ignored. The first match wins.
+/// whitespace is ignored. The first match wins. Segments that are empty or
+/// otherwise lack a `=` (e.g. a leading `;` or a valueless cookie) are skipped
+/// rather than aborting the scan.
 fn cookie_value(cookie_header: &str, name: &str) -> Option<String> {
     for pair in cookie_header.split(';') {
         let pair = pair.trim();
-        let (key, value) = pair.split_once('=')?;
+        let Some((key, value)) = pair.split_once('=') else {
+            continue;
+        };
         if key.trim() == name {
             let value = value.trim();
             if !value.is_empty() {
@@ -77,6 +81,26 @@ mod tests {
     fn finds_cookie_among_many() {
         let token = extract_token(None, Some(b"foo=bar; CF_AUTHORIZATION=the-token; baz=qux"));
         assert_eq!(token.as_deref(), Some("the-token"));
+    }
+
+    #[test]
+    fn skips_valueless_pairs_before_target() {
+        // A leading `;`, a valueless/flag cookie, and a doubled `;` must not
+        // abort the scan before the target cookie is reached.
+        let cases: &[&[u8]] = &[
+            b"; CF_AUTHORIZATION=the-token",
+            b"flag; CF_AUTHORIZATION=the-token",
+            b"foo=bar;; CF_AUTHORIZATION=the-token",
+            b"a=1; flag; b=2; CF_AUTHORIZATION=the-token; c=3",
+        ];
+        for raw in cases {
+            assert_eq!(
+                extract_token(None, Some(raw)).as_deref(),
+                Some("the-token"),
+                "failed for cookie header {:?}",
+                std::str::from_utf8(raw).unwrap(),
+            );
+        }
     }
 
     #[test]
