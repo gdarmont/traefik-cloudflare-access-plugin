@@ -29,9 +29,11 @@ that Cloudflare publishes at:
 https://<teamName>.cloudflareaccess.com/cdn-cgi/access/certs
 ```
 
-Cloudflare rotates these keys infrequently. **When they rotate, update the `jwks`
-in your dynamic configuration.** The plugin can hold multiple keys at once, so you
-can add the new key before the old one is retired for a zero-downtime rotation.
+Cloudflare rotates these keys infrequently and publishes the next key alongside
+the current one ahead of a rotation. You can paste them into your dynamic
+configuration by hand, but the recommended approach is to refresh them
+automatically — see [Automatic rotation](#automatic-rotation-recommended). The
+plugin holds multiple keys at once, so rotations are zero-downtime either way.
 
 ### Fetching the JWKS
 
@@ -57,6 +59,96 @@ The response looks like:
 ```
 
 Only `kid`, `kty`, `alg`, `n`, and `e` are used; any extra fields are ignored.
+
+### Automatic rotation (recommended)
+
+Because the guest cannot fetch keys itself, do it *outside* the sandbox: fetch the
+JWKS on a schedule and write it into a Traefik dynamic-configuration file that the
+[file provider](https://doc.traefik.io/traefik/providers/file/) watches. Traefik
+hot-reloads the change — no restart, no in-guest networking, no extra attack
+surface.
+
+[`scripts/refresh-jwks.sh`](scripts/refresh-jwks.sh) does exactly this. It fetches
+the certs and renders the middleware definition (with the fresh `jwks`) as a
+dynamic-config file. It is **fail safe**: if the fetch fails or returns no keys it
+leaves the existing file untouched (last-known-good), and it only rewrites the
+file when the content actually changes (no needless reloads). It needs `curl` and
+`jq`.
+
+Configure it with environment variables (`CF_TEAM_NAME` and `CF_OUTPUT` are
+required; see the script header for the full list):
+
+| Variable                  | Required | Default            | Description                                   |
+| ------------------------- | -------- | ------------------ | --------------------------------------------- |
+| `CF_TEAM_NAME`            | yes      | —                  | Cloudflare Access team name.                   |
+| `CF_OUTPUT`               | yes      | —                  | Path to the dynamic-config file to write.      |
+| `CF_CLIENT_ID`            | no       | `""`               | Access application AUD tag.                     |
+| `CF_SKIP_CLIENT_ID_CHECK` | no       | `false`            | `true`/`false`.                                |
+| `CF_SKIP_EXPIRY_CHECK`    | no       | `false`            | `true`/`false`.                                |
+| `CF_MIDDLEWARE_NAME`      | no       | `cloudflare-access`| Name of the generated middleware.              |
+
+Enable the file provider and point it at the output directory:
+
+```yaml
+# Traefik static configuration
+providers:
+  file:
+    directory: /etc/traefik/dynamic
+    watch: true
+```
+
+Hourly via cron is plenty (keys rotate on the order of weeks):
+
+```sh
+# /etc/cron.d/cloudflare-access-jwks
+CF_TEAM_NAME=myteam
+CF_CLIENT_ID=4714c1358e65fe4b408ad6d432a5f878f08194bdb4752441fd56faefa9b2b6f2
+CF_OUTPUT=/etc/traefik/dynamic/cloudflare-access.json
+17 * * * * root /opt/traefik/refresh-jwks.sh >> /var/log/jwks-refresh.log 2>&1
+```
+
+Or as a Docker Compose sidecar that shares a volume with Traefik:
+
+```yaml
+services:
+  traefik:
+    image: traefik:v3.3
+    command:
+      - --providers.file.directory=/dynamic
+      - --providers.file.watch=true
+      # ... your entrypoints, other providers, plugin declaration ...
+    volumes:
+      - dynamic:/dynamic:ro
+
+  jwks-refresh:
+    image: alpine:3.20
+    restart: unless-stopped
+    environment:
+      CF_TEAM_NAME: myteam
+      CF_CLIENT_ID: "4714c1358e65fe4b408ad6d432a5f878f08194bdb4752441fd56faefa9b2b6f2"
+      CF_OUTPUT: /dynamic/cloudflare-access.json
+      REFRESH_INTERVAL: "3600"
+    volumes:
+      - dynamic:/dynamic
+      - ./scripts/refresh-jwks.sh:/usr/local/bin/refresh-jwks.sh:ro
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        apk add --no-cache curl jq >/dev/null
+        while true; do
+          /usr/local/bin/refresh-jwks.sh || true
+          sleep "${REFRESH_INTERVAL:-3600}"
+        done
+
+volumes:
+  dynamic:
+```
+
+The script writes only the **middleware**; attach it to routers as usual. A
+middleware defined via the file provider is referenced as `cloudflare-access@file`
+from other providers (e.g. Docker labels), or just `cloudflare-access` from within
+the file provider itself.
 
 ## Configuration
 
@@ -197,6 +289,8 @@ src/
   main.rs       # http-wasm guest glue (wasm32 target only)
 tests/
   integration.rs
+scripts/
+  refresh-jwks.sh # fetch JWKS -> Traefik dynamic-config file (automatic rotation)
 _old/           # the previous Go implementation, kept for reference
 ```
 
