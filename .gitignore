@@ -4,5 +4,8 @@
 # Rust build artifacts
 /target
 
+# Distribution
+/dist
+
 # Go vendored dependencies (legacy implementation under _old/)
 _old/vendor/
