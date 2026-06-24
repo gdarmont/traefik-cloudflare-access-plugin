@@ -23,12 +23,13 @@ build wasm:
 clean:
 	cargo clean
 	rm -f ./plugin.wasm
+	rm -rf dist
 
 dist: build wasm
-	mkdir -p dist/traefik-cloudflare-access-plugin
-	cp plugin.wasm dist/traefik-cloudflare-access-plugin
-	cp .traefik.yml dist/traefik-cloudflare-access-plugin
-	cd dist && zip -r traefik-cloudflare-access-plugin.zip traefik-cloudflare-access-plugin
+	rm -rf dist
+	mkdir -p dist
+	cp plugin.wasm .traefik.yml dist/
+	cd dist && zip traefik-cloudflare-access-plugin.zip plugin.wasm .traefik.yml
 
 release:
 	@[ "$(VERSION)" ] || { echo "Usage: make release VERSION=0.5.0"; exit 1; }
